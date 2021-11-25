@@ -752,11 +752,11 @@ impl SimpleAsn1Writable<'_> for UtcTime {
         };
         push_two_digits(dest, year.try_into().unwrap());
         push_two_digits(dest, self.0.month().try_into().unwrap());
-        push_two_digits(dest, self.0.day().try_into().unwrap());
+        push_two_digits(dest, self.0.day());
 
-        push_two_digits(dest, self.0.hour().try_into().unwrap());
-        push_two_digits(dest, self.0.minute().try_into().unwrap());
-        push_two_digits(dest, self.0.second().try_into().unwrap());
+        push_two_digits(dest, self.0.hour());
+        push_two_digits(dest, self.0.minute());
+        push_two_digits(dest, self.0.second());
 
         dest.push(b'Z');
     }
@@ -808,11 +808,11 @@ impl SimpleAsn1Writable<'_> for GeneralizedTime {
     fn write_data(&self, dest: &mut Vec<u8>) {
         push_four_digits(dest, self.0.year().try_into().unwrap());
         push_two_digits(dest, self.0.month().try_into().unwrap());
-        push_two_digits(dest, self.0.day().try_into().unwrap());
+        push_two_digits(dest, self.0.day());
 
-        push_two_digits(dest, self.0.hour().try_into().unwrap());
-        push_two_digits(dest, self.0.minute().try_into().unwrap());
-        push_two_digits(dest, self.0.second().try_into().unwrap());
+        push_two_digits(dest, self.0.hour());
+        push_two_digits(dest, self.0.minute());
+        push_two_digits(dest, self.0.second());
 
         dest.push(b'Z');
     }
