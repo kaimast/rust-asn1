@@ -61,7 +61,7 @@ jobs:
       matrix:
         RUST:
           # MSRV
-          - VERSION: "1.41.0"
+          - VERSION: "1.51.0"
             FLAGS: "--no-default-features --features std,derive"
           - VERSION: stable
             FLAGS: ""
