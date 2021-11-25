@@ -1,12 +1,10 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
-use core::convert::TryInto;
+use core::convert::{TryFrom, TryInto};
 use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 use core::mem;
-
-use chrono::{Datelike, TimeZone, Timelike};
 
 use crate::writer::Writer;
 use crate::{
@@ -673,19 +671,21 @@ impl<'a> SimpleAsn1Writable<'a> for OwnedBitString {
 }
 
 /// Used for parsing and writing ASN.1 `UTC TIME` values. Wraps a
-/// `chrono::DateTime<Utc>`.
+/// `time::OffsetDateTime`.
 #[derive(Debug, Clone, PartialEq, Hash)]
-pub struct UtcTime(chrono::DateTime<chrono::Utc>);
+pub struct UtcTime(time::OffsetDateTime);
 
 impl UtcTime {
-    pub fn new(v: chrono::DateTime<chrono::Utc>) -> Option<UtcTime> {
+    pub fn new(v: time::OffsetDateTime) -> Option<UtcTime> {
         if v.year() >= 2050 || v.year() < 1950 {
             return None;
         }
-        Some(UtcTime(v))
+        Some(UtcTime(v.to_offset(time::UtcOffset::UTC)))
     }
 
-    pub fn as_chrono(&self) -> &chrono::DateTime<chrono::Utc> {
+    /// Returns the `time::OffsetDateTime` this value represents. The returned
+    /// value always has a UTC offset.
+    pub fn as_time(&self) -> &time::OffsetDateTime {
         &self.0
     }
 }
@@ -693,34 +693,38 @@ impl UtcTime {
 impl SimpleAsn1Readable<'_> for UtcTime {
     const TAG: u8 = 0x17;
     fn parse_data(data: &[u8]) -> ParseResult<Self> {
-        let data = core::str::from_utf8(data)
-            .map_err(|_| ParseError::new(ParseErrorKind::InvalidValue))?;
-
         // UTCTime comes in 4 different formats: with and without seconds, and
         // with a fixed offset or UTC. We choose which to parse as based on the
         // input length.
-        let mut dt = match data.len() {
-            17 => chrono::DateTime::parse_from_str(data, "%y%m%d%H%M%S%z").map(|dt| dt.into()),
-            15 => chrono::DateTime::parse_from_str(data, "%y%m%d%H%M%z").map(|dt| dt.into()),
-            13 => chrono::Utc.datetime_from_str(data, "%y%m%d%H%M%SZ"),
-            11 => chrono::Utc.datetime_from_str(data, "%y%m%d%H%MZ"),
+        let mut parsed = time::parsing::Parsed::new();
+        match data.len() {
+            17 => parsed.parse_items(data, time::macros::format_description!("[year repr:last_two][month][day][hour][minute][second][offset_hour sign:mandatory][offset_minute]")),
+            15 => parsed.parse_items(data, time::macros::format_description!("[year repr:last_two][month][day][hour][minute][offset_hour sign:mandatory][offset_minute]")),
+            13 => parsed.parse_items(data, time::macros::format_description!("[year repr:last_two][month][day][hour][minute][second]Z")),
+            11 => parsed.parse_items(data, time::macros::format_description!("[year repr:last_two][month][day][hour][minute]Z")),
             _ => return Err(ParseError::new(ParseErrorKind::InvalidValue)),
         }
         .map_err(|_| ParseError::new(ParseErrorKind::InvalidValue))?;
+        // UTCTime only encodes times prior to 2050. We use the X.509 mapping of two-digit
+        // year ordinals to full year:
+        // https://tools.ietf.org/html/rfc5280#section-4.1.2.5.1
+        let yy = i32::from(parsed.year_last_two().unwrap());
+        let year = if yy >= 50 { 1900 + yy } else { 2000 + yy };
+        parsed.set_year(year);
+
+        if parsed.offset_hour().is_none() {
+            parsed.set_offset_hour(0);
+        }
+
+        let dt = time::OffsetDateTime::try_from(parsed)
+            .map_err(|_| ParseError::new(ParseErrorKind::InvalidValue))?;
+
         // Reject leap seconds, which aren't allowed by ASN.1. chrono encodes them as
         // nanoseconds == 1000000.
         if dt.nanosecond() >= 1_000_000 {
             return Err(ParseError::new(ParseErrorKind::InvalidValue));
         }
-        // UTCTime only encodes times prior to 2050. We use the X.509 mapping of two-digit
-        // year ordinals to full year:
-        // https://tools.ietf.org/html/rfc5280#section-4.1.2.5.1
-        if dt.year() >= 2050 {
-            dt = chrono::Utc
-                .ymd(dt.year() - 100, dt.month(), dt.day())
-                .and_hms(dt.hour(), dt.minute(), dt.second());
-        }
-        Ok(UtcTime(dt))
+        Ok(UtcTime::new(dt).unwrap())
     }
 }
 
@@ -759,16 +763,18 @@ impl SimpleAsn1Writable<'_> for UtcTime {
 }
 
 /// Used for parsing and writing ASN.1 `GENERALIZED TIME` values. Wraps a
-/// `chrono::DateTime<Utc>`.
+/// `time::OffsetDateTime`.
 #[derive(Debug, Clone, PartialEq, Hash)]
-pub struct GeneralizedTime(chrono::DateTime<chrono::Utc>);
+pub struct GeneralizedTime(time::OffsetDateTime);
 
 impl GeneralizedTime {
-    pub fn new(v: chrono::DateTime<chrono::Utc>) -> GeneralizedTime {
-        GeneralizedTime(v)
+    pub fn new(v: time::OffsetDateTime) -> GeneralizedTime {
+        GeneralizedTime(v.to_offset(time::UtcOffset::UTC))
     }
 
-    pub fn as_chrono(&self) -> &chrono::DateTime<chrono::Utc> {
+    /// Returns the `time::OffsetDateTime` this value represents. The returned
+    /// value always has a UTC offset.
+    pub fn as_time(&self) -> &time::OffsetDateTime {
         &self.0
     }
 }
@@ -778,11 +784,19 @@ impl SimpleAsn1Readable<'_> for GeneralizedTime {
     fn parse_data(data: &[u8]) -> ParseResult<GeneralizedTime> {
         let data = core::str::from_utf8(data)
             .map_err(|_| ParseError::new(ParseErrorKind::InvalidValue))?;
-        if let Ok(v) = chrono::Utc.datetime_from_str(data, "%Y%m%d%H%M%SZ") {
-            return Ok(GeneralizedTime::new(v));
+        if let Ok(v) = time::PrimitiveDateTime::parse(
+            data,
+            time::macros::format_description!("[year][month][day][hour][minute][second]Z"),
+        ) {
+            return Ok(GeneralizedTime::new(v.assume_offset(time::UtcOffset::UTC)));
         }
-        if let Ok(v) = chrono::DateTime::parse_from_str(data, "%Y%m%d%H%M%S%z") {
-            return Ok(GeneralizedTime::new(v.into()));
+        if let Ok(v) = time::OffsetDateTime::parse(
+            data,
+            time::macros::format_description!(
+                "[year][month][day][hour][minute][second][offset_hour sign:mandatory][offset_minute]"
+            ),
+        ) {
+            return Ok(GeneralizedTime::new(v));
         }
 
         Err(ParseError::new(ParseErrorKind::InvalidValue))
@@ -1382,7 +1396,6 @@ mod tests {
         parse_single, IA5String, ParseError, ParseErrorKind, PrintableString, SequenceOf, SetOf,
         Tlv, UtcTime,
     };
-    use chrono::TimeZone;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -1486,7 +1499,7 @@ mod tests {
 
     #[test]
     fn test_utctime_new() {
-        assert!(UtcTime::new(chrono::Utc.ymd(1950, 1, 1).and_hms(12, 0, 0)).is_some());
-        assert!(UtcTime::new(chrono::Utc.ymd(2050, 1, 1).and_hms(12, 0, 0)).is_none());
+        assert!(UtcTime::new(time::macros::datetime!(1950-01-01 12:00:00 UTC)).is_some());
+        assert!(UtcTime::new(time::macros::datetime!(2050-01-01 12:00:00 UTC)).is_none());
     }
 }

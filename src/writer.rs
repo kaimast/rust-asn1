@@ -128,8 +128,6 @@ pub fn write_single<'a, T: Asn1Writable<'a>>(v: &T) -> Vec<u8> {
 mod tests {
     use alloc::vec;
 
-    use chrono::{TimeZone, Utc};
-
     use super::{_insert_at_position, write, write_single, Writer};
     use crate::types::Asn1Writable;
     use crate::{
@@ -350,15 +348,16 @@ mod tests {
     fn test_write_utctime() {
         assert_writes::<UtcTime>(&[
             (
-                UtcTime::new(Utc.ymd(1991, 5, 6).and_hms(23, 45, 40)).unwrap(),
+                UtcTime::new(time::macros::datetime!(1991-05-06 23:45:40 UTC)).unwrap(),
                 b"\x17\x0d910506234540Z",
             ),
             (
-                UtcTime::new(Utc.timestamp(0, 0)).unwrap(),
+                UtcTime::new(time::OffsetDateTime::from_unix_timestamp(0).unwrap()).unwrap(),
                 b"\x17\x0d700101000000Z",
             ),
             (
-                UtcTime::new(Utc.timestamp(1258325776, 0)).unwrap(),
+                UtcTime::new(time::OffsetDateTime::from_unix_timestamp(1258325776).unwrap())
+                    .unwrap(),
                 b"\x17\x0d091115225616Z",
             ),
         ]);
@@ -368,15 +367,17 @@ mod tests {
     fn test_write_generalizedtime() {
         assert_writes(&[
             (
-                GeneralizedTime::new(Utc.ymd(1991, 5, 6).and_hms(23, 45, 40)),
+                GeneralizedTime::new(time::macros::datetime!(1991-05-06 23:45:40 UTC)),
                 b"\x18\x0f19910506234540Z",
             ),
             (
-                GeneralizedTime::new(Utc.timestamp(0, 0)),
+                GeneralizedTime::new(time::OffsetDateTime::from_unix_timestamp(0).unwrap()),
                 b"\x18\x0f19700101000000Z",
             ),
             (
-                GeneralizedTime::new(Utc.timestamp(1258325776, 0)),
+                GeneralizedTime::new(
+                    time::OffsetDateTime::from_unix_timestamp(1258325776).unwrap(),
+                ),
                 b"\x18\x0f20091115225616Z",
             ),
         ]);

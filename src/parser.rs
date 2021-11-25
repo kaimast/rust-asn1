@@ -276,7 +276,6 @@ mod tests {
     #[cfg(feature = "const-generics")]
     use crate::{Explicit, Implicit};
     use alloc::vec;
-    use chrono::{FixedOffset, TimeZone, Utc};
     use core::fmt;
 
     #[test]
@@ -344,7 +343,7 @@ mod tests {
     ) {
         for (expected, der_bytes) in data {
             let result = crate::parse(der_bytes, &f);
-            assert_eq!(&result, expected);
+            assert_eq!(&result, expected, "der_bytes={:?}", der_bytes);
         }
     }
 
@@ -791,35 +790,23 @@ mod tests {
     fn test_parse_utctime() {
         assert_parses::<UtcTime>(&[
             (
-                Ok(UtcTime::new(
-                    FixedOffset::west(7 * 60 * 60)
-                        .ymd(1991, 5, 6)
-                        .and_hms(16, 45, 40)
-                        .into(),
-                )
-                .unwrap()),
+                Ok(UtcTime::new(time::macros::datetime!(1991-05-06 16:45:40 -07:00)).unwrap()),
                 b"\x17\x11910506164540-0700",
             ),
             (
-                Ok(UtcTime::new(
-                    FixedOffset::east(7 * 60 * 60 + 30 * 60)
-                        .ymd(1991, 5, 6)
-                        .and_hms(16, 45, 40)
-                        .into(),
-                )
-                .unwrap()),
+                Ok(UtcTime::new(time::macros::datetime!(1991-05-06 16:45:40 +07:30)).unwrap()),
                 b"\x17\x11910506164540+0730",
             ),
             (
-                Ok(UtcTime::new(Utc.ymd(1991, 5, 6).and_hms(23, 45, 40)).unwrap()),
+                Ok(UtcTime::new(time::macros::datetime!(1991-05-06 23:45:40 UTC)).unwrap()),
                 b"\x17\x0d910506234540Z",
             ),
             (
-                Ok(UtcTime::new(Utc.ymd(1991, 5, 6).and_hms(23, 45, 0)).unwrap()),
+                Ok(UtcTime::new(time::macros::datetime!(1991-05-06 23:45:00 UTC)).unwrap()),
                 b"\x17\x0b9105062345Z",
             ),
             (
-                Ok(UtcTime::new(Utc.ymd(1951, 5, 6).and_hms(23, 45, 0)).unwrap()),
+                Ok(UtcTime::new(time::macros::datetime!(1951-05-06 23:45:00 UTC)).unwrap()),
                 b"\x17\x0b5105062345Z",
             ),
             (
@@ -933,24 +920,20 @@ mod tests {
     fn test_generalizedtime() {
         assert_parses::<GeneralizedTime>(&[
             (
-                Ok(GeneralizedTime::new(Utc.ymd(2010, 1, 2).and_hms(3, 4, 5))),
+                Ok(GeneralizedTime::new(
+                    time::macros::datetime!(2010-01-02 03:04:05 UTC),
+                )),
                 b"\x18\x0f20100102030405Z",
             ),
             (
                 Ok(GeneralizedTime::new(
-                    FixedOffset::east(6 * 60 * 60 + 7 * 60)
-                        .ymd(2010, 1, 2)
-                        .and_hms(3, 4, 5)
-                        .into(),
+                    time::macros::datetime!(2010-01-02 03:04:05 +06:07),
                 )),
                 b"\x18\x1320100102030405+0607",
             ),
             (
                 Ok(GeneralizedTime::new(
-                    FixedOffset::west(6 * 60 * 60 + 7 * 60)
-                        .ymd(2010, 1, 2)
-                        .and_hms(3, 4, 5)
-                        .into(),
+                    time::macros::datetime!(2010-01-02 03:04:05 -06:07),
                 )),
                 b"\x18\x1320100102030405-0607",
             ),
