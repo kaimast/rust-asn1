@@ -638,7 +638,7 @@ impl<'a> SimpleAsn1Readable<'a> for ObjectIdentifier<'a> {
     const TAG: u8 = 0x06;
     fn parse_data(data: &'a [u8]) -> ParseResult<ObjectIdentifier<'a>> {
         ObjectIdentifier::from_der(data)
-            .ok_or_else(|| ParseError::new(ParseErrorKind::InvalidValue))
+            .ok_or_else(|| ParseError::new(ParseErrorKind::InvalidObjectId))
     }
 }
 impl<'a> SimpleAsn1Writable<'a> for ObjectIdentifier<'a> {

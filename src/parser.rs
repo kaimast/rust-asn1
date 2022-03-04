@@ -6,6 +6,8 @@ use core::fmt;
 pub enum ParseErrorKind {
     /// Something about the value was invalid.
     InvalidValue,
+    /// Something about an object id was invalid.
+    InvalidObjectId,
     /// An unexpected tag was encountered.
     UnexpectedTag { actual: u8 },
     /// There was not enough data available to complete parsing.
@@ -104,6 +106,7 @@ impl fmt::Display for ParseError {
         write!(f, "ASN.1 parsing error: ")?;
         match self.kind {
             ParseErrorKind::InvalidValue => write!(f, "invalid value"),
+            ParseErrorKind::InvalidObjectId => write!(f, "invalid object id"),
             ParseErrorKind::UnexpectedTag { actual } => {
                 write!(f, "unexpected tag (got {})", actual)
             }
@@ -714,15 +717,15 @@ mod tests {
                 b"\x06\x03\x81\x34\x03",
             ),
             (
-                Err(ParseError::new(ParseErrorKind::InvalidValue)),
+                Err(ParseError::new(ParseErrorKind::InvalidObjectId)),
                 b"\x06\x00",
             ),
             (
-                Err(ParseError::new(ParseErrorKind::InvalidValue)),
+                Err(ParseError::new(ParseErrorKind::InvalidObjectId)),
                 b"\x06\x07\x55\x02\xc0\x80\x80\x80\x80",
             ),
             (
-                Err(ParseError::new(ParseErrorKind::InvalidValue)),
+                Err(ParseError::new(ParseErrorKind::InvalidObjectId)),
                 b"\x06\x02\x2a\x86",
             ),
         ])
