@@ -17,7 +17,8 @@ pub struct ObjectIdentifier<'a> {
 fn _read_base128_int<I: Iterator<Item = u8>>(mut reader: I) -> Option<u128> {
     let mut ret = 0u128;
 
-    while let Some(b) = reader.next() {
+    for _ in 0..std::mem::size_of::<u128>() {
+        let b = reader.next()?;
         ret <<= 7;
         ret |= u128::from(b & 0x7f);
         if b & 0x80 == 0 {
