@@ -16,18 +16,16 @@ jobs:
         RUST:
           - nightly
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
         with:
           persist-credentials: false
 
-      - uses: actions-rs/toolchain@v1.0.7
+      - uses: dtolnay/rust-toolchain@1ce4a7352a1efe5dede2e52c75512b34256e4f44
         with:
-          profile: minimal
           toolchain: ${{ matrix.RUST }}
-          override: true
           components: rustfmt, clippy
 
-      - uses: actions/cache@v2.1.7
+      - uses: actions/cache@v3.0.11
         with:
           path: |
             ~/.cargo/bin/
@@ -37,28 +35,12 @@ jobs:
             target/
           key: ${{ runner.os }}-${{ matrix.RUST }}-cargo-2-${{ hashFiles('**/Cargo.toml') }}
 
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: fmt
-          args: --all -- --check
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: fmt
-          args: --all --manifest-path=asn1_derive/Cargo.toml -- --check
+      - run: cargo fmt --all -- --check
+      - run: cargo fmt --all --manifest-path=asn1_derive/Cargo.toml -- --check
 
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: clippy
-          args: --all-targets -- -D warnings
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: clippy
-          args: --all-targets --manifest-path=asn1_derive/Cargo.toml -- -D warnings
-
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: clippy
-          args: --all-targets --all-features -- -D warnings
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo clippy --all-targets --manifest-path=asn1_derive/Cargo.toml -- -D warnings
+      - run: cargo clippy --all-targets --all-features -- -D warnings
 
   ci:
     runs-on: ubuntu-latest
@@ -66,10 +48,16 @@ jobs:
       matrix:
         RUST:
           # MSRV
-          - VERSION: "1.41.0"
-            FLAGS: "--no-default-features --features std,derive"
+          - VERSION: "1.47.0"
+            FLAGS: "--no-default-features --features std"
+          # MSRV for the fallible-allocations features
+          - VERSION: "1.57.0"
+            FLAGS: "--features fallible-allocations"
+
           - VERSION: stable
             FLAGS: ""
+          - VERSION: stable
+            FLAGS: "--features fallible-allocations"
           - VERSION: stable
             FLAGS: "--no-default-features --features std"
           - VERSION: stable
@@ -83,20 +71,19 @@ jobs:
             FLAGS: ""
           - VERSION: nightly
             FLAGS: "--no-default-features --features std"
+          - VERSION: nightly
+            FLAGS: "-Z minimal-versions"
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
         with:
           persist-credentials: false
 
-      - uses: actions-rs/toolchain@v1.0.7
+      - uses: dtolnay/rust-toolchain@1ce4a7352a1efe5dede2e52c75512b34256e4f44
         with:
-          profile: minimal
           toolchain: ${{ matrix.RUST.VERSION }}
-          override: true
-          components: rustfmt, clippy
 
-      - uses: actions/cache@v2.1.7
+      - uses: actions/cache@v3.0.11
         with:
           path: |
             ~/.cargo/bin/
@@ -106,36 +93,26 @@ jobs:
             target/
           key: ${{ runner.os }}-${{ matrix.RUST.VERSION }}-cargo-2-${{ hashFiles('**/Cargo.toml') }}
 
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: test
-          args: ${{ matrix.RUST.FLAGS }}
+      - run: cargo test ${{ matrix.RUST.FLAGS }}
         if: "${{ !matrix.RUST.SKIP_TESTS }}"
 
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: check
-          args: ${{ matrix.RUST.FLAGS }}
+      - run: cargo check --tests ${{ matrix.RUST.FLAGS }}
 
-  fuzz:
+  coverage:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        RUST:
-          - nightly
-
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
         with:
           persist-credentials: false
 
-      - uses: actions-rs/toolchain@v1.0.7
+      - uses: dtolnay/rust-toolchain@1ce4a7352a1efe5dede2e52c75512b34256e4f44
         with:
-          profile: minimal
-          toolchain: ${{ matrix.RUST }}
-          override: true
+          toolchain: nightly
+          components: llvm-tools-preview
 
-      - uses: actions/cache@v2.1.7
+      - run: sudo apt update && sudo apt-get install -y lcov
+
+      - uses: actions/cache@v3.0.11
         id: cargo-cache
         with:
           path: |
@@ -144,22 +121,50 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-3-${{ hashFiles('**/Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-4-${{ hashFiles('**/Cargo.toml') }}
 
-      - uses: actions-rs/install@v0.1.2
-        with:
-          crate: cargo-fuzz
-          version: latest
+      - run: cargo install cargo-binutils
         if: steps.cargo-cache.outputs.cache-hit != 'true'
 
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: fuzz
-          args: run --all-features fuzz_asn1_parse -- -max_total_time=30
+      - run: cargo test
+        env:
+          RUSTFLAGS: "-Cinstrument-coverage"
+          LLVM_PROFILE_FILE: "rust-cov/cov-%m-%p.profraw"
 
-      # On main we fuzz for 30 minutes, but only 30 seconds on PRs.
-      - uses: actions-rs/cargo@v1.0.3
+      - name: Compute coverage HTML
+        run: |
+          set -xe
+          cargo profdata -- merge -sparse rust-cov/*.profraw -o cargo-test-rust-cov.profdata
+          cargo cov -- export \
+            $( \
+              for file in \
+                $( \
+                  RUSTFLAGS="-Cinstrument-coverage" \
+                    cargo test --tests --no-run --message-format=json \
+                      | jq -r "select(.profile.test == true) | .filenames[]" \
+                ); \
+              do \
+                printf "%s %s " -object $file; \
+              done \
+            ) \
+            -instr-profile=cargo-test-rust-cov.profdata \
+            --ignore-filename-regex='/.cargo/registry' \
+            --ignore-filename-regex='/rustc/' \
+            --ignore-filename-regex='/.rustup/toolchains/' --format=lcov > cargo-test.lcov
+
+          genhtml cargo-test.lcov -o coverage-html | tee output.log
+
+      - uses: actions/upload-artifact@v3.1.1
         with:
-          command: fuzz
-          args: run --all-features fuzz_asn1_parse -- -max_total_time=1800
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+          name: coverage-html
+          path: coverage-html
+
+      - name: Check coverage
+        run: |
+          import re
+          with open("output.log") as f:
+              [line] = [l for l in f if l.startswith("  lines......:")]
+          coverage = float(re.search("([\d\.]+)%", line).group(1))
+          if coverage < 100:
+              raise ValueError(f"Coverage too low: {coverage}")
+        shell: python

@@ -1,10 +1,8 @@
-#![cfg(feature = "derive")]
-
 use std::fmt;
 
 fn assert_roundtrips<
     'a,
-    T: asn1::Asn1Readable<'a> + asn1::Asn1Writable<'a> + PartialEq + fmt::Debug,
+    T: asn1::Asn1Readable<'a> + asn1::Asn1Writable + PartialEq + fmt::Debug,
 >(
     data: &[(asn1::ParseResult<T>, &'a [u8])],
 ) {
@@ -12,7 +10,7 @@ fn assert_roundtrips<
         let parsed = asn1::parse_single::<T>(der_bytes);
         assert_eq!(value, &parsed);
         if let Ok(v) = value {
-            let result = asn1::write_single(v);
+            let result = asn1::write_single(v).unwrap();
             assert_eq!(&result, der_bytes);
         }
     }
@@ -20,7 +18,7 @@ fn assert_roundtrips<
 
 #[test]
 fn test_struct_no_fields() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq, Eq)]
     struct NoFields;
 
     assert_roundtrips(&[
@@ -29,12 +27,12 @@ fn test_struct_no_fields() {
             Err(asn1::ParseError::new(asn1::ParseErrorKind::ExtraData)),
             b"\x30\x01\x00",
         ),
-    ])
+    ]);
 }
 
 #[test]
 fn test_struct_simple_fields() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq, Eq)]
     struct SimpleFields {
         a: u64,
         b: u64,
@@ -47,7 +45,7 @@ fn test_struct_simple_fields() {
 
 #[test]
 fn test_tuple_struct_simple_fields() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq, Eq)]
     struct SimpleFields(u8, u8);
 
     assert_roundtrips(&[(Ok(SimpleFields(2, 3)), b"\x30\x06\x02\x01\x02\x02\x01\x03")]);
@@ -55,7 +53,7 @@ fn test_tuple_struct_simple_fields() {
 
 #[test]
 fn test_struct_lifetime() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq, Eq)]
     struct Lifetimes<'a> {
         a: &'a [u8],
     }
@@ -65,7 +63,7 @@ fn test_struct_lifetime() {
 
 #[test]
 fn test_optional() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq, Eq)]
     struct OptionalFields {
         zzz: Option<u8>,
     }
@@ -82,10 +80,10 @@ fn test_optional() {
 
 #[test]
 fn test_explicit() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq, Eq)]
     struct EmptySequence;
 
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq, Eq)]
     struct ExplicitFields {
         #[explicit(5)]
         a: Option<u8>,
@@ -121,10 +119,10 @@ fn test_explicit() {
 
 #[test]
 fn test_implicit() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq, Eq)]
     struct EmptySequence;
 
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, Debug, PartialEq, Eq)]
     struct ImplicitFields {
         #[implicit(5)]
         a: Option<u8>,
@@ -160,7 +158,7 @@ fn test_implicit() {
 
 #[test]
 fn test_default() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     struct DefaultFields {
         #[default(13)]
         a: u8,
@@ -270,7 +268,7 @@ fn test_default_const_generics() {
 
 #[test]
 fn test_default_bool() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     struct DefaultField {
         #[default(false)]
         a: bool,
@@ -284,12 +282,12 @@ fn test_default_bool() {
                 .add_location(asn1::ParseLocation::Field("DefaultField::a"))),
             b"\x30\x03\x01\x01\x00",
         ),
-    ])
+    ]);
 }
 
 #[test]
 fn test_enum() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     enum BasicChoice {
         A(u64),
         B(()),
@@ -300,7 +298,7 @@ fn test_enum() {
         (Ok(BasicChoice::B(())), b"\x05\x00"),
         (
             Err(asn1::ParseError::new(asn1::ParseErrorKind::UnexpectedTag {
-                actual: 4,
+                actual: asn1::Tag::primitive(4),
             })),
             b"\x04\x00",
         ),
@@ -315,7 +313,7 @@ fn test_enum() {
 
 #[test]
 fn test_enum_lifetimes() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     enum LifetimesChoice<'a> {
         A(u64),
         B(&'a [u8]),
@@ -326,7 +324,7 @@ fn test_enum_lifetimes() {
         (Ok(LifetimesChoice::B(b"lol")), b"\x04\x03lol"),
         (
             Err(asn1::ParseError::new(asn1::ParseErrorKind::UnexpectedTag {
-                actual: 5,
+                actual: asn1::Tag::primitive(5),
             })),
             b"\x05\x00",
         ),
@@ -341,7 +339,7 @@ fn test_enum_lifetimes() {
 
 #[test]
 fn test_enum_explicit() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     enum ExplicitChoice<'a> {
         #[explicit(5)]
         A(u64),
@@ -353,7 +351,7 @@ fn test_enum_explicit() {
         (Ok(ExplicitChoice::B(b"lol")), b"\x04\x03lol"),
         (
             Err(asn1::ParseError::new(asn1::ParseErrorKind::UnexpectedTag {
-                actual: 5,
+                actual: asn1::Tag::primitive(5),
             })),
             b"\x05\x00",
         ),
@@ -368,10 +366,10 @@ fn test_enum_explicit() {
 
 #[test]
 fn test_enum_implicit() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     struct EmptySequence;
 
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     enum ImplicitChoice<'a> {
         #[implicit(5)]
         A(u64),
@@ -386,7 +384,7 @@ fn test_enum_implicit() {
         (Ok(ImplicitChoice::C(b"lol")), b"\x04\x03lol"),
         (
             Err(asn1::ParseError::new(asn1::ParseErrorKind::UnexpectedTag {
-                actual: 5,
+                actual: asn1::Tag::primitive(5),
             })),
             b"\x05\x00",
         ),
@@ -402,15 +400,15 @@ fn test_enum_implicit() {
 
 #[test]
 fn test_error_parse_location() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     struct InnerSeq(u64);
 
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     enum InnerEnum {
         Int(u64),
     }
 
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     struct OuterSeq {
         inner: InnerSeq,
         inner_enum: Option<InnerEnum>,
@@ -434,7 +432,7 @@ fn test_error_parse_location() {
 
 #[test]
 fn test_required_implicit() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     struct RequiredImplicit {
         #[implicit(0, required)]
         value: u8,
@@ -448,10 +446,10 @@ fn test_required_implicit() {
             b"\x30\x00",
         ),
         (
-            Err(
-                asn1::ParseError::new(asn1::ParseErrorKind::UnexpectedTag { actual: 11 })
-                    .add_location(asn1::ParseLocation::Field("RequiredImplicit::value")),
-            ),
+            Err(asn1::ParseError::new(asn1::ParseErrorKind::UnexpectedTag {
+                actual: asn1::Tag::primitive(11),
+            })
+            .add_location(asn1::ParseLocation::Field("RequiredImplicit::value"))),
             b"\x30\x03\x0b\x01\x00",
         ),
     ]);
@@ -459,7 +457,7 @@ fn test_required_implicit() {
 
 #[test]
 fn test_required_explicit() {
-    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug)]
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
     struct RequiredExplicit {
         #[explicit(0, required)]
         value: u8,
@@ -476,11 +474,56 @@ fn test_required_explicit() {
             b"\x30\x00",
         ),
         (
-            Err(
-                asn1::ParseError::new(asn1::ParseErrorKind::UnexpectedTag { actual: 11 })
-                    .add_location(asn1::ParseLocation::Field("RequiredExplicit::value")),
-            ),
+            Err(asn1::ParseError::new(asn1::ParseErrorKind::UnexpectedTag {
+                actual: asn1::Tag::primitive(11),
+            })
+            .add_location(asn1::ParseLocation::Field("RequiredExplicit::value"))),
             b"\x30\x03\x0b\x01\x00",
+        ),
+    ]);
+}
+
+#[test]
+fn test_defined_by() {
+    const OID1: asn1::ObjectIdentifier = asn1::oid!(1, 2, 3);
+    const OID2: asn1::ObjectIdentifier = asn1::oid!(1, 2, 5);
+
+    #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Debug, Eq)]
+    struct S<'a> {
+        oid: asn1::DefinedByMarker<asn1::ObjectIdentifier>,
+        #[defined_by(oid)]
+        value: Value<'a>,
+    }
+
+    #[derive(asn1::Asn1DefinedByRead, asn1::Asn1DefinedByWrite, PartialEq, Debug, Eq)]
+    enum Value<'a> {
+        #[defined_by(OID1)]
+        OctetString(&'a [u8]),
+        #[defined_by(OID2)]
+        Integer(u32),
+    }
+
+    assert_roundtrips::<S>(&[
+        (
+            Ok(S {
+                oid: asn1::DefinedByMarker::marker(),
+                value: Value::OctetString(b"abc"),
+            }),
+            b"\x30\x09\x06\x02\x2a\x03\x04\x03abc",
+        ),
+        (
+            Ok(S {
+                oid: asn1::DefinedByMarker::marker(),
+                value: Value::Integer(17),
+            }),
+            b"\x30\x07\x06\x02\x2a\x05\x02\x01\x11",
+        ),
+        (
+            Err(
+                asn1::ParseError::new(asn1::ParseErrorKind::UnknownDefinedBy)
+                    .add_location(asn1::ParseLocation::Field("S::value")),
+            ),
+            b"\x30\x04\x06\x02\x2a\x07",
         ),
     ]);
 }

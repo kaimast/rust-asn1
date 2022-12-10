@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 /// Represents an ASN.1 `BIT STRING` whose contents is borrowed.
-#[derive(Debug, PartialEq, Clone, Hash)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct BitString<'a> {
     data: &'a [u8],
     padding_bits: u8,
@@ -43,8 +43,9 @@ impl<'a> BitString<'a> {
     }
 }
 
-/// Represents an ASN.1 `BIT STRING` whose contents owned.
-#[derive(Debug, PartialEq, Clone, Hash)]
+/// Represents an ASN.1 `BIT STRING` whose contents owned. When used to parse
+/// data this will allocate.
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct OwnedBitString {
     data: Vec<u8>,
     padding_bits: u8,
@@ -64,6 +65,7 @@ impl OwnedBitString {
 #[cfg(test)]
 mod tests {
     use crate::{BitString, OwnedBitString};
+    use alloc::vec;
 
     #[test]
     fn test_bitstring_new() {
