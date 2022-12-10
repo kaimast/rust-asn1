@@ -210,49 +210,27 @@ impl<'a> Parser<'a> {
     }
 
     fn read_length(&mut self) -> ParseResult<usize> {
-        match self.read_u8()? {
-            n if (n & 0x80) == 0 => Ok(usize::from(n)),
-            0x81 => {
-                let length = usize::from(self.read_u8()?);
-                // Do not allow values <0x80 to be encoded using the long form
-                if length < 0x80 {
-                    return Err(ParseError::new(ParseErrorKind::InvalidLength));
-                }
-                Ok(length)
+        let n = self.read_u8()?;
+
+        if (n & 0x80) == 0 {
+            Ok(usize::from(n))
+        } else {
+            let num_bytes = usize::from(n & 0x08);
+            if num_bytes > core::mem::size_of::<usize>() {
+                panic!("Length is too long");
             }
-            0x82 => {
-                let length = usize::from(self.read_u8()?) << 8 | usize::from(self.read_u8()?);
-                // Enforce that we're not using long form for values <0x80,
-                // and that the first byte of the length is not zero (i.e.
-                // that we're minimally encoded)
-                if length < 0x100 {
-                    return Err(ParseError::new(ParseErrorKind::InvalidLength));
-                }
-                Ok(length)
+
+            let mut length = 0;
+            for i in (0..num_bytes).rev() {
+                length |= usize::from(self.read_u8()?) << 8*i;
             }
-            0x83 => {
-                let length = usize::from(self.read_u8()?) << 16
-                    | usize::from(self.read_u8()?) << 8
-                    | usize::from(self.read_u8()?);
-                // Same thing as the 0x82 case
-                if length < 0x10000 {
-                    return Err(ParseError::new(ParseErrorKind::InvalidLength));
-                }
-                Ok(length)
-            }
-            0x84 => {
-                let length = usize::from(self.read_u8()?) << 24
-                    | usize::from(self.read_u8()?) << 16
-                    | usize::from(self.read_u8()?) << 8
-                    | usize::from(self.read_u8()?);
-                // Same thing as the 0x82 case
-                if length < 0x1000000 {
-                    return Err(ParseError::new(ParseErrorKind::InvalidLength));
-                }
-                Ok(length)
-            }
-            // We only support two-byte lengths
-            _ => Err(ParseError::new(ParseErrorKind::InvalidLength)),
+
+            /*
+            // Do not allow values <0x80 to be encoded using the long form
+            if length < 0x80 {
+                return Err(ParseError::new(ParseErrorKind::InvalidLength));
+            }*/
+            Ok(length)
         }
     }
 
